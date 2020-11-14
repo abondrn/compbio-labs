@@ -1,0 +1,7 @@
+##gff-version 3
+NODE_17_length_154231_cov_9.579771	barrnap:0.9	rRNA	124549	126080	0	+	.	Name=16S_rRNA;product=16S ribosomal RNA
+NODE_1_length_687575_cov_8.340472	barrnap:0.9	rRNA	46293	47824	0	+	.	Name=16S_rRNA;product=16S ribosomal RNA
+NODE_23_length_103367_cov_10.080628	barrnap:0.9	rRNA	35538	37069	0	+	.	Name=16S_rRNA;product=16S ribosomal RNA
+NODE_3_length_378948_cov_10.008563	barrnap:0.9	rRNA	348507	350038	0	+	.	Name=16S_rRNA;product=16S ribosomal RNA
+NODE_5_length_332503_cov_9.112282	barrnap:0.9	rRNA	137018	138549	0	-	.	Name=16S_rRNA;product=16S ribosomal RNA
+NODE_6_length_298797_cov_8.927468	barrnap:0.9	rRNA	13936	15467	0	+	.	Name=16S_rRNA;product=16S ribosomal RNA
