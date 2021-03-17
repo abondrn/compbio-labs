@@ -1,6 +1,10 @@
+
+#!/usr/bin/env python3
+
 import argparse
 import logging
-import statistics
+from statistics import mean
+from math import nan
 from typing import Any, List, Dict, Tuple
 from collections import defaultdict
 from collections.abc import Sequence
@@ -17,14 +21,19 @@ def ExAC_POST_bulk_variants(variant_ids: List[str]) -> Dict[str, Any]:
     '''
     Given a list of variant IDs, retrieve the variant information from the Broad ExAC API.
 
+    Alleles are specified by the ExAC API as a  string.
+
     arguments:
-    variant_ids: A list of variant IDs, in the form of CHR-POS-REF-ALT, to be passed to the ExAC service
+    variant_ids: A list of variant IDs, in the form of
+    CHROMOSOME-POSITION-REFERENCE-VARIANT, to be passed to the ExAC service
 
     return:
     JSON object from API call, as a Python nested dictionary
     '''
+    logging.info('Fetching bulk variants')
     res = requests.post(BULK_VARIANT_URL, json=variant_ids)
     res.raise_for_status()
+    logging.info('Done fetching')
     return res.json()
 
 
@@ -74,7 +83,7 @@ def most_deleterious_effect(record: Dict[str, Any], consequences: Dict[str, int]
                 if program == 'PolyPhen':
                     score = 1-score
                 missense_scores.append(score)
-        mean_missense_score = statistics.mean(missense_scores) if len(missense_scores) != 0 else 1
+        mean_missense_score = mean(missense_scores) if len(missense_scores) != 0 else 1
         return (consequence_score[0], mean_missense_score, consequence_score[1])
 
     if 'consequence' not in record or record['consequence'] is None:
@@ -85,9 +94,92 @@ def most_deleterious_effect(record: Dict[str, Any], consequences: Dict[str, int]
     return min(effects, key=key)
 
 
+def normalize_variant(pos: int, ref: str, alt: str) -> Tuple[int, str, str]:
+    '''Perform variant normalization'''
+    limit = min(len(ref), len(alt))
+    # right trim
+    k = 0
+    while limit+k > 1 and ref[k-1] == alt[k-1]:
+        k -= 1
+    # left trim
+    j = 0
+    while j+1 < limit+k and ref[j] == alt[j]:
+        j += 1
+    
+    return pos+j, ref[j:len(ref)+k], alt[j:len(alt)+k]
+
+
+PURINE = 'AG'
+PYRIMIDINE = 'CT'
+
+
+def tabulate_vcf(vcf_file: str) -> pd.DataFrame:
+    vcf_rows = []
+    for var in VCF(vcf_file):
+        # If there is more than one non-reference allele, there will be
+        # separate read information that must be extracted for each allele
+        types = var.INFO.get('TYPE').split(',')
+        if var.INFO.get('NUMALT') == 1:
+            variant_reads = [var.INFO.get('AO')]
+        else:
+            variant_reads = var.INFO.get('AO')
+
+        for i in range(var.INFO.get('NUMALT')):
+            pos, ref, alt = normalize_variant(var.POS, var.REF, var.ALT[i])
+
+            type = types[i]
+            if type == 'snp':
+                try:
+                    assert len(ref) == len(alt) == 1
+                except:
+                    print(i, j, k, var)
+                    raise
+                # SNP was grouped with ins or del, resulting in superfluous read lengths
+                ref, alt = ref[0], alt[0]
+                if (ref in PURINE and alt in PURINE) or (ref in PYRIMIDINE and alt in PYRIMIDINE):
+                    type = 'ts'
+                else:
+                    type = 'tv'
+        
+            variant_id = '%s-%d-%s-%s' % (var.CHROM, pos, ref, alt)
+            vcf_rows.append({
+                'id': variant_id,
+                'chr': var.CHROM,
+                'pos': var.POS,
+                'type': type,
+                'ref': var.REF,
+                'alt': var.ALT[i],
+                'coverage_depth': var.INFO.get('DP'),
+                'reference_reads': var.INFO.get('RO'),
+                'variant_reads': variant_reads[i],
+            })
+    return pd.DataFrame.from_records(vcf_rows)
+
+
+def tabulate_ExAC_variants(variant_ids: List[str], cons_file: str, missing: str) -> pd.DataFrame:
+    consequences = parse_consequences(cons_file)
+    variant_data = ExAC_POST_bulk_variants(variant_ids)
+
+    variant_rows = []
+    for variant_id in variant_ids:
+        record = variant_data[variant_id]
+        effect = most_deleterious_effect(record, consequences)
+        if 'variant' not in record or 'allele_freq' not in record['variant']:
+            allele_freq = nan
+        else:
+            allele_freq = float(record['variant']['allele_freq'])
+        variant_rows.append({
+            'effect': effect['major_consequence'] if effect else missing,
+            'SIFT': effect['SIFT'] or '.' if effect else missing,
+            'PolyPhen': effect['PolyPhen'] or '.' if effect else missing,
+            'allele_frequency': allele_freq,
+        })
+    return pd.DataFrame.from_records(variant_rows)
+
+
 def variant_annotate(vcf_file: str, cons_file: str, missing: str = '.') -> pd.DataFrame:
     '''
-    Performs variant annotation.
+    Generates a table of annotated variants drawn from a VCF file.
 
     arguments:
     vcf_file: The filename of a VCF file containing the variants to-be-annotated
@@ -97,72 +189,39 @@ def variant_annotate(vcf_file: str, cons_file: str, missing: str = '.') -> pd.Da
     returns:
     A Pandas DataFrame containing the annotated variants
     '''
-    variant_ids = []
-    vcf_rows = []
-    for var in VCF(vcf_file):
-        # If there is more than one non-reference allele, there will be
-        # separate read information that must be extracted for each allele
-        row = {
-            'chr': var.CHROM,
-            'pos': var.POS,
-            'ref': var.REF,
-            'coverage_depth': var.INFO.get('DP'),
-        }
 
-        types = var.INFO.get('TYPE').split(',')
-        if var.INFO.get('NUMALT') == 1:
-            variant_reads = [var.INFO.get('AO')]
-        else:
-            variant_reads = var.INFO.get('AO')
+    vcf_df = tabulate_vcf(vcf_file)
+    vcf_df['variant_percent'] = 100*vcf_df['variant_reads'] / vcf_df['coverage_depth']
+    vcf_df['reference_percent'] = 100*vcf_df['reference_reads'] / vcf_df['coverage_depth']
 
-        for i in range(var.INFO.get('NUMALT')):
-            variant_ids.append('%s-%d-%s-%s' % (var.CHROM, var.POS, var.REF, var.ALT[i]))
-            row.update({
-                'alt': var.ALT[i],
-                'type': types[i],
-                'variant_reads': variant_reads[i],
-            })
-            vcf_rows.append(row.copy())
-    
-    consequences = parse_consequences(cons_file)
-    data = ExAC_POST_bulk_variants(variant_ids)
-
-    variant_rows = []
-    for var in variant_ids:
-        record = data[var]
-        effect = most_deleterious_effect(record, consequences)
-        if 'variant' not in record or 'allele_freq' not in record['variant']:
-            allele_freq = missing
-        else:
-            allele_freq = record['variant']['allele_freq']
-        variant_rows.append({
-            'allele_frequency': allele_freq,
-            'effect': effect['major_consequence'] if effect else missing,
-            'SIFT': effect['SIFT'] if effect else missing,
-            'PolyPhen': effect['PolyPhen'] if effect else missing,
-        })
+    exac_df = tabulate_ExAC_variants(list(vcf_df.id), cons_file, missing)
     
     df = pd.concat([
-        pd.DataFrame.from_records(vcf_rows),
-        pd.DataFrame.from_records(variant_rows)
+        vcf_df,
+        exac_df
     ], axis='columns')
-    df['variant_percent'] = 100*df['variant_reads'] / df['coverage_depth']
     return df
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    '''Outputs variant annotation table based on the supplied command-line-arguments'''
+    parser = argparse.ArgumentParser(description='Prototype of a variant annotation tool')
 
-    parser.add_argument('input', metavar='VCF', type=str, help='variant call filename in vcf format')
+    parser.add_argument('input', metavar='VCF', type=str, help='variant call filename in VCF format')
     parser.add_argument('-c', metavar='CONSEQUENCES', type=str, default='consequences.tsv', help='a TSV containing information to rank variant consequences')
-    parser.add_argument('--out', metavar='TSV', required=False, type=str, help='output filename in tsv format')
+    parser.add_argument('-o', metavar='TSV', required=False, type=str, help='output filename in TSV format')
+    parser.add_argument('-p', metavar='PRECISION', required=False, type=int, help='round figures to that many digits past the decimal point')
     args = parser.parse_args()
 
     annotated = variant_annotate(args.input, args.c)
-    if args.out:
-        annotated.to_csv(path_or_buf=args.out, sep='\t', index=False)
+    kwargs = dict(sep='\t', index=False)
+    if args.p:
+        assert args.p >= 0, 'Precision must be nonnegative'
+        kwargs['float_format'] = f'%.{args.p}f'
+    if args.o:
+        annotated.to_csv(path_or_buf=args.o, **kwargs)
     else:
-        print(annotated.to_csv(sep='\t', index=False))
+        print(annotated.to_csv(**kwargs))
 
 
 if __name__ == '__main__':

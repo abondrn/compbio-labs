@@ -9,20 +9,21 @@ Prototype of a variant annotation tool. Data provided as a part of a Tempus Labs
 
 1. Install the required packages, for example by running `pip install -r requirements.txt`. Note that this requires Python 3.5 or newer as I utilize type annotations.
 
-2. Run the script, for example `python3 tempus_va.py Challenge_data.vcf -o Challenge_annotated.tsv` was used to generate the data in this repo.
+2. Run the script, for example `python tempus_va.py Challenge_data.vcf -o Challenge_annotated.tsv` was used to generate the data in this repo.
 
 ```
-usage: tempus_va.py [-h] [-c CONSEQUENCES] [-o TSV] VCF
+usage: tempus_va.py [-h] [-c CONSEQUENCES] [-o TSV] [-p PRECISION] VCF
 
 Prototype of a variant annotation tool
 
 positional arguments:
-  VCF              variant call filename in vcf format
+  VCF              variant call filename in VCF format
 
 optional arguments:
   -h, --help       show this help message and exit
   -c CONSEQUENCES  a TSV containing information to rank variant consequences
   -o TSV           output filename in TSV format
+  -p PRECISION     round figures to that many digits past the decimal point
 ```
 
 ## Output Format

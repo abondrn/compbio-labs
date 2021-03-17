@@ -9,7 +9,6 @@ start_lost	A codon variant that changes at least one base of the canonical start
 transcript_amplification	A feature amplification of a region containing a transcript	SO:0001889	Transcript amplification	HIGH
 exon_loss_variant				HIGH
 initiator_codon_variant				HIGH
-initiator_codon_variant				HIGH
 rare_amino_acid_variant				HIGH
 chromosomal_deletion				HIGH
 inframe_insertion	An inframe non synonymous variant that inserts bases into in the coding sequence	SO:0001821	Inframe insertion	MODERATE
@@ -44,10 +43,7 @@ exon_variant				MODIFIER
 5_prime_UTR_premature_start_codon_gain_variant				MODIFIER
 conserved_intron_variant				MODIFIER
 nc_transcript_variant				MODIFIER
-incomplete_terminal_codon_variant				MODIFIER
 non_coding_exon_variant				MODIFIER
-transcript_ablation				MODIFIER
-transcript_amplification				MODIFIER
 splice_region_variant	A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron	SO:0001630	Splice region variant	LOW
 incomplete_terminal_codon_variant	A sequence variant where at least one base of the final codon of an incompletely annotated transcript is changed	SO:0001626	Incomplete terminal codon variant	LOW
 start_retained_variant	A sequence variant where at least one base in the start codon is changed, but the start remains	SO:0002019	Start retained variant	LOW
