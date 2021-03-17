@@ -7,7 +7,6 @@ from statistics import mean
 from math import nan
 from typing import Any, List, Dict, Tuple
 from collections import defaultdict
-from collections.abc import Sequence
 
 import pandas as pd
 import requests
@@ -25,7 +24,7 @@ def ExAC_POST_bulk_variants(variant_ids: List[str]) -> Dict[str, Any]:
 
     arguments:
     variant_ids: A list of variant IDs, in the form of
-    CHROMOSOME-POSITION-REFERENCE-VARIANT, to be passed to the ExAC service
+        CHROMOSOME-POSITION-REFERENCE-VARIANT, to be passed to the ExAC service
 
     return:
     JSON object from API call, as a Python nested dictionary
@@ -53,7 +52,8 @@ def parse_consequences(tsv_file: str) -> Dict[str, Tuple[int, int]]:
     tsv_file: A filename containing consequence information in the form of a tab-seperated values
 
     returns:
-    A dictionary of consequences indexed by the SO term, and containing the enumeration of the impact category (whether HIGH, MODERATE, etc) and relative position (for resolving ties)
+    A dictionary of consequences indexed by the SO term,
+        and containing the enumeration of the impact category (whether HIGH, MODERATE, etc) and relative position (for resolving ties)
     '''
     df = pd.read_csv(tsv_file, sep='\t')
     key = defaultdict(lambda c: 1)
@@ -64,11 +64,13 @@ def parse_consequences(tsv_file: str) -> Dict[str, Tuple[int, int]]:
 
 def most_deleterious_effect(record: Dict[str, Any], consequences: Dict[str, int]) -> Dict[str, Any]:
     '''
-    Uses information associated with a variant from the ExAC service to elevate the effect determined to be the most deleterious
+    Uses information associated with a variant from the ExAC service
+        to elevate the effect determined to be the most deleterious
 
     arguments:
     record: An ExAC variant record as serialized JSON
-    consequences: A consequence ranking dictionary, such as one that might be returned from `parse_consequences`
+    consequences: A consequence ranking dictionary,
+        such as one that might be returned from `parse_consequences`
 
     returns:
     The JSON associated with the effect deemed to be the most clinically significant
@@ -129,11 +131,7 @@ def tabulate_vcf(vcf_file: str) -> pd.DataFrame:
 
             type = types[i]
             if type == 'snp':
-                try:
-                    assert len(ref) == len(alt) == 1
-                except:
-                    print(i, j, k, var)
-                    raise
+                assert len(ref) == len(alt) == 1, 'Normalization failed: SNP longer than 1 nt'
                 # SNP was grouped with ins or del, resulting in superfluous read lengths
                 ref, alt = ref[0], alt[0]
                 if (ref in PURINE and alt in PURINE) or (ref in PYRIMIDINE and alt in PYRIMIDINE):
@@ -169,10 +167,11 @@ def tabulate_ExAC_variants(variant_ids: List[str], cons_file: str, missing: str)
         else:
             allele_freq = float(record['variant']['allele_freq'])
         variant_rows.append({
+            'allele_frequency': allele_freq,
+            'gene': effect['SYMBOL'] if effect else missing,
             'effect': effect['major_consequence'] if effect else missing,
             'SIFT': effect['SIFT'] or '.' if effect else missing,
             'PolyPhen': effect['PolyPhen'] or '.' if effect else missing,
-            'allele_frequency': allele_freq,
         })
     return pd.DataFrame.from_records(variant_rows)
 
